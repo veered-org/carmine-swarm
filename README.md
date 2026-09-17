@@ -21,7 +21,36 @@ If something doesn't work, you can ask Claude (or another AI coding assistant) t
 into it, and I'd appreciate hearing what you found and how you fixed it. You are also
 welcome to just let me know at support@veered.org, and I'll look into it.
 
-## How it works
+## Put your own copy on the internet
+
+You do not have to be a programmer, and it costs nothing to start: the game is hosted by
+Cloudflare, who will run something this small for free, and a domain name of your own is
+about $10 a year if you want one.
+
+1. **Get the game.** Download the source (the button at the top of this page) and unzip
+   it. You now have a folder called `carmine-swarm`.
+2. **Open a free Cloudflare account** at
+   [dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up). An email address
+   and a password; no card needed.
+3. **Install Node.js** from [nodejs.org](https://nodejs.org) — take the version it
+   offers — and install it like any other program. This is what does the uploading.
+4. **Open a terminal** in that folder (on Windows, right-click the folder and choose
+   "Open in Terminal"; on a Mac, Terminal) and type these two lines, one at a time:
+
+```bash
+npm install
+npx wrangler deploy
+```
+
+The first collects the pieces the game needs; the second signs you in to Cloudflare in a
+browser window and then prints a web address ending in `workers.dev`. That is your copy —
+send the link to whoever you want to play against.
+
+To try it on your own computer first, type `npx wrangler dev` instead and open
+`http://localhost:8787` in two tabs. If something goes wrong, paste the error into
+Claude and ask what it means.
+
+## Information for nerds
 
 - **Server:** a Cloudflare Worker with Durable Objects (`src/`). One `Room` Durable
   Object holds the players' WebSockets and runs the 20 Hz simulation tick
@@ -31,19 +60,11 @@ welcome to just let me know at support@veered.org, and I'll look into it.
 - **Stats:** a `Stats` Durable Object keeps one row per finished match, readable at
   `/api/stats?key=STATS_KEY&days=N`.
 
-## Run it yourself
-
-Requires Node.js 22 or later.
-
-```bash
-npm install
-cp .dev.vars.example .dev.vars   # optional
-npx wrangler dev                 # then open http://localhost:8787 in two tabs
-```
-
-To deploy to your own Cloudflare account, run `npx wrangler deploy`. To serve it on
-your own hostname, uncomment the `[[routes]]` block in `wrangler.toml`. The optional
-`STATS_KEY` is set in production with `npx wrangler secret put STATS_KEY`.
+- **Requirements:** Node.js 22 or later.
+- **Optional settings:** `cp .dev.vars.example .dev.vars` for local runs; `STATS_KEY` is
+  set in production with `npx wrangler secret put STATS_KEY`.
+- **Your own hostname:** uncomment the `[[routes]]` block in `wrangler.toml` and deploy
+  again.
 
 ## Credits and licenses
 
