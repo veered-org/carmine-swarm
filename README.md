@@ -1,6 +1,8 @@
-# Carmine: Swarm Command, a two-player real-time strategy game
+# Carmine: Swarm Command, the two-player prototype for Merlot
 
 *Why Carmine? Carmine dye is made from swarms of cochineal insects.*
+
+Carmine was the prototype for [Merlot](https://veered.org/merlot/): the swarm battle it started as grew into Merlot's team strategy game.
 
 **Play it now: [swarm.veered.org](https://swarm.veered.org)** · more games at [veered.org](https://veered.org)
 
