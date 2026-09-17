@@ -1,4 +1,4 @@
-# Carmine: Swarm Command, the two-player prototype for Merlot
+# Carmine (Swarm): Two-Player Real-Time Strategy Game
 
 *Why Carmine? Carmine dye is made from swarms of cochineal insects.*
 
