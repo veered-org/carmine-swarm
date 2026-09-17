@@ -1,0 +1,43 @@
+name = "swarm"
+main = "src/index.js"
+compatibility_date = "2026-08-08"
+
+# workers_dev keeps the *.workers.dev hostname reachable as a fallback origin.
+# Adding a [[routes]] custom_domain entry turns it off unless this is set.
+workers_dev = true
+
+# run_worker_first matters: without it the assets layer answers any request whose
+# path matches a file, so the websocket upgrade to "/" gets served index.html and
+# the Worker never runs. The symptom is a 200 with CF-Cache-Status: HIT instead
+# of a 101.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+# Custom Domain rather than a route: Cloudflare creates the DNS record and the
+# certificate itself.
+# To serve on your own domain, uncomment and change the hostname:
+# [[routes]]
+# pattern = "swarm.example.com"
+# custom_domain = true
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+# One instance, holding a row per finished game for the operator stats.
+[[durable_objects.bindings]]
+name = "STATS"
+class_name = "Stats"
+
+# new_sqlite_classes, not new_classes: the Workers Free plan only allows
+# SQLite-backed Durable Objects. new_classes puts the object on the key-value
+# backend and the deploy is rejected on a free account.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Stats"]

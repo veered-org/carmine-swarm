@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Swarm v0.1 — Two-Player Browser Strategy Game</title>
+<!-- Veered favicon + corner mark. One line, shared by every game. -->
+<script src="https://veered.org/vee-badge.js" defer></script>
+<meta name="description" content="A free two-player online strategy game that runs in your browser. Drag-select your minions, send them at the towers, and capture your opponent's base. No download and no sign-up — share the link and play.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Swarm v0.1 — Two-Player Browser Strategy Game">
+<meta property="og:description" content="A free two-player online strategy game. Drag-select your minions, take the towers, capture the base. No download, no sign-up.">
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --line: #262d36;
+    --text: #d7dee7;
+    --dim: #7d8894;
+    --t1: #45a7f5;
+    --t1d: #1c5f96;
+    --t2: #f2794b;
+    --t2d: #9c4324;
+    --neutral: #6b7684;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font: 14px/1.4 "Lexend", system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow: hidden;
+  }
+  #wrap {
+    height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 10px; padding: 10px;
+  }
+  #hud {
+    width: 100%; max-width: 1280px;
+    display: flex; align-items: center; gap: 14px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 14px;
+  }
+  .side { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.t1 { background: var(--t1); }
+  .dot.t2 { background: var(--t2); }
+  .name { font-weight: 600; }
+  .stat { color: var(--dim); }
+  .stat b { color: var(--text); font-weight: 600; }
+  #center { flex: 1; text-align: center; color: var(--dim); }
+  #center b { color: var(--text); }
+  #stage { position: relative; width: 100%; max-width: 1280px; }
+  canvas {
+    display: block; width: 100%; height: auto;
+    background: #0a0e14;
+    border: 1px solid var(--line); border-radius: 10px;
+    cursor: crosshair; touch-action: none;
+  }
+  #overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(8, 11, 16, .82);
+    border-radius: 10px; text-align: center; padding: 20px;
+  }
+  #overlay.hidden { display: none; }
+  #overlay .card { max-width: 600px; }
+  #overlay h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: .5px; }
+  #overlay h2 { margin: 0 0 14px; font-size: 20px; font-weight: 500; color: var(--dim); }
+  #overlay ul { text-align: left; display: inline-block; color: var(--dim); margin: 0 0 16px; padding-left: 18px; }
+  #overlay li { margin: 3px 0; }
+  #overlay kbd {
+    background: #222a34; border: 1px solid #333d49; border-bottom-width: 2px;
+    border-radius: 4px; padding: 1px 6px; font-family: inherit; font-size: 12px; color: var(--text);
+  }
+  button {
+    font: inherit; font-weight: 600; color: #08111b;
+    background: var(--t1); border: 0; border-radius: 8px;
+    padding: 9px 20px; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.1); }
+  #legend { color: var(--dim); font-size: 12px; text-align: center; }
+  #legend kbd {
+    background: #1b222b; border: 1px solid var(--line);
+    border-radius: 4px; padding: 1px 5px; color: var(--text);
+  }
+  #mute {
+    background: #1b222b; color: var(--dim); border: 1px solid var(--line);
+    border-radius: 4px; padding: 1px 8px; font: inherit; font-size: 12px;
+    font-weight: 500; cursor: pointer;
+  }
+  #mute:hover { color: var(--text); filter: none; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud">
+    <div class="side"><span class="dot t1"></span><span class="name" id="n1">Blue</span>
+      <span class="stat"><b id="u1">0</b> minions</span>
+      <span class="stat"><b id="w1">0</b> towers</span>
+    </div>
+    <div id="center">Connecting&hellip;</div>
+    <div class="side">
+      <span class="stat"><b id="w2">0</b> towers</span>
+      <span class="stat"><b id="u2">0</b> minions</span>
+      <span class="name" id="n2">Orange</span><span class="dot t2"></span>
+    </div>
+  </div>
+
+  <div id="stage">
+    <canvas id="c"></canvas>
+    <div id="overlay">
+      <div class="card">
+        <h1>SWARM</h1>
+        <h2 id="sub">Waiting for an opponent&hellip;</h2>
+        <ul>
+          <li><b>Drag</b> with the left mouse button to select your minions.</li>
+          <li><b>Right-click</b> to send the selected minions somewhere.</li>
+          <li>Right-click with <b>nothing selected</b> to set a rally point for new spawns.</li>
+          <li><kbd>A</kbd> select every minion you own &nbsp; <kbd>Shift</kbd> add to selection</li>
+          <li>Stand on a tower to capture it. Towers you own spawn more minions.</li>
+          <li>Minions fight on contact and heal near your own towers.</li>
+          <li><b>Capture the enemy base to win.</b></li>
+        </ul>
+        <div><button id="go">Got it</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="legend">
+    <kbd>Drag</kbd> select &nbsp;&middot;&nbsp; <kbd>Right-click</kbd> move &nbsp;&middot;&nbsp;
+    <kbd>A</kbd> select all &nbsp;&middot;&nbsp; <kbd>Shift</kbd> add &nbsp;&middot;&nbsp;
+    <span id="ping">&mdash;</span> &nbsp;&middot;&nbsp;
+    <button id="mute" type="button">Sound: on</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let WORLD = { w: 1280, h: 720 };
+let TOWERS = [];
+let CAP_RADIUS = 70;
+let UNIT_R = 7;
+let myTeam = 0;
+// place in the spectator queue, 1 = next in line for a seat; 0 once seated
+let myQueue = 0;
+
+const COL = { 0: '#6b7684', 1: '#45a7f5', 2: '#f2794b' };
+const COL_DARK = { 1: '#123c62', 2: '#5d2713', 0: '#2b313a' };
+
+/* ---------------- sound ----------------
+ * Everything is synthesised at runtime, so the game stays a single HTML file
+ * with no audio assets to ship. Browsers refuse to start an AudioContext
+ * before a user gesture, so init is deferred to the first click or keypress.
+ */
+
+const SFX = (() => {
+  let ctx = null;
+  let master = null;
+  let bedGain = null;       // continuous "battle" layer, driven by how many
+  let noiseBuf = null;      // minions are currently swinging at each other
+  let muted = localStorage.getItem('swarm-muted') === '1';
+  let lastSpawn = 0;
+  let lastDowned = 0;
+
+  function ensure() {
+    if (ctx) {
+      if (ctx.state === 'suspended') ctx.resume();
+      return ctx;
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    ctx = new AC();
+
+    master = ctx.createGain();
+    master.gain.value = muted ? 0 : 0.85;
+    master.connect(ctx.destination);
+
+    const len = Math.floor(ctx.sampleRate * 2);
+    noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    src.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 420;
+    bp.Q.value = 0.7;
+    bedGain = ctx.createGain();
+    bedGain.gain.value = 0;
+    src.connect(bp).connect(bedGain).connect(master);
+    src.start();
+
+    return ctx;
+  }
+
+  function tone(freq, dur, opts) {
+    if (!ctx || muted) return;
+    const o = opts || {};
+    const t = ctx.currentTime + (o.delay || 0);
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + dur);
+    const peak = o.gain === undefined ? 0.07 : o.gain;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g).connect(master);
+    osc.start(t);
+    osc.stop(t + dur + 0.03);
+  }
+
+  function burst(dur, freq, gain, delay) {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime + (delay || 0);
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    src.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(freq, t);
+    bp.frequency.exponentialRampToValueAtTime(freq * 0.45, t + dur);
+    bp.Q.value = 1.4;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(bp).connect(g).connect(master);
+    src.start(t);
+    src.stop(t + dur + 0.03);
+  }
+
+  // Snapshot-driven cues are delayed to line up with the interpolated render,
+  // which intentionally trails the server by INTERP_MS.
+  const SYNC = () => INTERP_MS / 1000;
+
+  return {
+    ensure,
+    isMuted: () => muted,
+    toggle() {
+      muted = !muted;
+      localStorage.setItem('swarm-muted', muted ? '1' : '0');
+      if (!muted) ensure();
+      if (master) master.gain.setTargetAtTime(muted ? 0 : 0.85, ctx.currentTime, 0.02);
+      return muted;
+    },
+
+    /* how hard the fight is raging right now (0..1) */
+    battle(intensity) {
+      if (!bedGain || !ctx) return;
+      bedGain.gain.setTargetAtTime(muted ? 0 : intensity * 0.09, ctx.currentTime, 0.25);
+    },
+
+    spawn(n) {
+      const now = performance.now();
+      if (now - lastSpawn < 90) return;   // spawns come in floods; thin them out
+      lastSpawn = now;
+      tone(620 + Math.random() * 160, 0.07, { gain: 0.025, type: 'sine', delay: SYNC() });
+    },
+
+    downed(n) {
+      const now = performance.now();
+      if (now - lastDowned < 55) return;
+      lastDowned = now;
+      const k = Math.min(n, 3);
+      for (let i = 0; i < k; i++) {
+        burst(0.13, 800 + Math.random() * 500, 0.05 + Math.min(n, 8) * 0.004, SYNC() + i * 0.035);
+      }
+    },
+
+    capture(mine) {
+      if (mine) {
+        tone(523, 0.12, { gain: 0.09, type: 'triangle', delay: SYNC() });
+        tone(784, 0.22, { gain: 0.09, type: 'triangle', delay: SYNC() + 0.1 });
+      } else {
+        tone(392, 0.12, { gain: 0.08, type: 'triangle', delay: SYNC() });
+        tone(262, 0.26, { gain: 0.08, type: 'triangle', delay: SYNC() + 0.1 });
+      }
+    },
+
+    order() { tone(300, 0.07, { gain: 0.05, type: 'triangle', to: 220 }); },
+    rally() { tone(440, 0.08, { gain: 0.06, type: 'triangle' }); tone(660, 0.14, { gain: 0.06, type: 'triangle', delay: 0.08 }); },
+    select() { tone(1100, 0.035, { gain: 0.028, type: 'square' }); },
+    tick() { tone(600, 0.09, { gain: 0.07, type: 'square' }); },
+    start() { tone(900, 0.18, { gain: 0.09, type: 'square' }); },
+
+    win() {
+      [523, 659, 784, 1047].forEach((f, i) =>
+        tone(f, i === 3 ? 0.5 : 0.16, { gain: 0.1, type: 'triangle', delay: i * 0.13 }));
+    },
+    lose() {
+      [392, 330, 262].forEach((f, i) =>
+        tone(f, i === 2 ? 0.6 : 0.2, { gain: 0.09, type: 'sawtooth', delay: i * 0.16 }));
+    },
+  };
+})();
+
+window.addEventListener('pointerdown', () => SFX.ensure(), { once: false });
+window.addEventListener('keydown', () => SFX.ensure(), { once: false });
+
+const muteBtn = document.getElementById('mute');
+function paintMute() { muteBtn.textContent = 'Sound: ' + (SFX.isMuted() ? 'off' : 'on'); }
+muteBtn.addEventListener('click', () => { SFX.toggle(); paintMute(); muteBtn.blur(); });
+paintMute();
+
+/* ---------------- rendering surface ---------------- */
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cssW = canvas.clientWidth || WORLD.w;
+  canvas.width = Math.round(WORLD.w * dpr);
+  canvas.height = Math.round(WORLD.h * dpr);
+  canvas.style.aspectRatio = WORLD.w + ' / ' + WORLD.h;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resize);
+
+function toWorld(ev) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: ((ev.clientX - r.left) / r.width) * WORLD.w,
+    y: ((ev.clientY - r.top) / r.height) * WORLD.h,
+  };
+}
+
+/* ---------------- network ---------------- */
+
+const INTERP_MS = 100;
+const buffer = [];          // { time, units: Map, towers, meta }
+let latest = null;
+let gameId = 0;
+let selection = new Set();
+let ws = null;
+let pingMs = null;
+let pingSeq = 0;
+let pingSentAt = 0;
+
+function connect() {
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+
+  ws.onopen = () => {
+    setInterval(() => {
+      if (ws.readyState === 1) {
+        pingSentAt = performance.now();
+        ws.send(JSON.stringify({ t: 'ping', i: ++pingSeq }));
+      }
+    }, 2000);
+  };
+
+  ws.onmessage = (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.t === 'hello') {
+      myTeam = m.you;
+      myQueue = m.queue || 0;
+      WORLD = m.world;
+      TOWERS = m.towers;
+      CAP_RADIUS = m.tuning.capRadius;
+      UNIT_R = m.tuning.unitR;
+      resize();
+      return;
+    }
+    /* Sent when the seats change hands. A spectator promoted out of the queue
+       learns its team here - `hello` is long gone by then. */
+    if (m.t === 'seat') {
+      const wasSpectating = !myTeam;
+      myTeam = m.you;
+      myQueue = m.queue || 0;
+      if (wasSpectating && myTeam) selection.clear();
+      return;
+    }
+    if (m.t === 'pong') {
+      pingMs = Math.round(performance.now() - pingSentAt);
+      return;
+    }
+    if (m.t === 's') onSnapshot(m);
+  };
+
+  ws.onclose = () => {
+    latest = null;
+    document.getElementById('center').textContent = 'Disconnected - retrying...';
+    setTimeout(connect, 1500);
+  };
+}
+
+/* What a spectator is told while they wait. Seats are handed out in arrival
+   order, so the promise only holds for whoever is at the front of the line. */
+function queueLine() {
+  return myQueue > 1
+    ? `Both seats are taken — you are #${myQueue} in line for a spot.`
+    : 'Both seats are taken — when someone leaves, you’ll get a spot.';
+}
+
+function onSnapshot(m) {
+  const prev = latest;
+  const freshGame = m.g !== gameId;
+  if (freshGame) {
+    gameId = m.g;
+    selection.clear();
+    buffer.length = 0;
+  }
+
+  const units = new Map();
+  for (let i = 0; i < m.u.length; i += 6) {
+    units.set(m.u[i], {
+      id: m.u[i], team: m.u[i + 1], x: m.u[i + 2], y: m.u[i + 3],
+      hp: m.u[i + 4], atk: m.u[i + 5],
+    });
+  }
+  const towers = [];
+  for (let i = 0; i < m.w.length; i += 3) {
+    towers.push({ owner: m.w[i], cap: m.w[i + 1], pulse: m.w[i + 2] });
+  }
+
+  buffer.push({ time: performance.now(), units, towers, m });
+  while (buffer.length > 6) buffer.shift();
+  latest = { units, towers, m };
+
+  soundsFromSnapshot(prev, { units, towers, m }, freshGame);
+
+  for (const id of Array.from(selection)) if (!units.has(id)) selection.delete(id);
+  updateHUD(m);
+}
+
+let lastState = null;
+let lastCountdown = null;
+
+/* The server sends world state, not events, so cues are derived by diffing
+   consecutive snapshots. */
+function soundsFromSnapshot(prev, cur, freshGame) {
+  const m = cur.m;
+
+  if (m.st !== lastState) {
+    if (m.st === 'playing') SFX.start();
+    else if (m.st === 'over') (m.win === myTeam ? SFX.win() : SFX.lose());
+    lastState = m.st;
+    lastCountdown = null;
+  }
+  if (m.st === 'countdown' && m.cd !== lastCountdown) {
+    if (m.cd > 0) SFX.tick();
+    lastCountdown = m.cd;
+  }
+
+  // A fresh game means every unit and tower "changed"; skip that first diff.
+  if (!prev || freshGame) return;
+
+  for (let i = 0; i < cur.towers.length; i++) {
+    const before = prev.towers[i];
+    const after = cur.towers[i];
+    if (before && after.owner !== 0 && before.owner !== after.owner) {
+      SFX.capture(after.owner === myTeam);
+    }
+  }
+
+  let born = 0;
+  let downed = 0;
+  for (const id of cur.units.keys()) if (!prev.units.has(id)) born++;
+  for (const id of prev.units.keys()) if (!cur.units.has(id)) downed++;
+  if (born) SFX.spawn(born);
+  if (downed) SFX.downed(downed);
+
+  let fighting = 0;
+  for (const u of cur.units.values()) if (u.atk) fighting++;
+  SFX.battle(m.st === 'playing' ? Math.min(fighting / 26, 1) : 0);
+}
+
+/* ---------------- HUD ---------------- */
+
+const el = (id) => document.getElementById(id);
+
+function updateHUD(m) {
+  el('u1').textContent = m.c[0];
+  el('u2').textContent = m.c[1];
+  el('w1').textContent = m.c[2];
+  el('w2').textContent = m.c[3];
+  el('n1').textContent = 'Blue' + (myTeam === 1 ? ' (you)' : '');
+  el('n2').textContent = 'Orange' + (myTeam === 2 ? ' (you)' : '');
+  el('ping').textContent = pingMs === null ? '—' : pingMs + ' ms';
+
+  const c = el('center');
+  const mm = String(Math.floor(m.clock / 60)).padStart(2, '0');
+  const ss = String(m.clock % 60).padStart(2, '0');
+
+  if (m.st === 'lobby') {
+    c.innerHTML = myTeam
+      ? '<b>Waiting for an opponent</b> — share this page’s URL'
+      : `<b>Spectating</b> — ${myQueue > 1 ? '#' + myQueue + ' in line' : 'next in line for a seat'}`;
+  } else if (m.st === 'countdown') {
+    c.innerHTML = '<b>Starting in ' + m.cd + '…</b>';
+  } else if (m.st === 'playing') {
+    c.innerHTML = '<b>' + mm + ':' + ss + '</b>';
+  } else if (m.st === 'over') {
+    const who = m.win === myTeam ? 'You win!' : myTeam ? 'You lose.' : (m.win === 1 ? 'Blue wins' : 'Orange wins');
+    c.innerHTML = '<b>' + who + '</b> ' + m.why;
+  }
+
+  const ov = el('overlay');
+  const sub = el('sub');
+  if (m.st === 'over') {
+    ov.classList.remove('hidden');
+    sub.textContent = (m.win === 1 ? 'Blue' : 'Orange') + ' wins — ' + m.why;
+    el('go').textContent = 'Play again';
+  } else if (m.st === 'lobby' && !introDismissed) {
+    ov.classList.remove('hidden');
+    sub.textContent = myTeam ? 'Waiting for an opponent…' : queueLine();
+    el('go').textContent = 'Got it';
+  } else if (m.st !== 'lobby') {
+    ov.classList.add('hidden');
+  }
+}
+
+let introDismissed = false;
+el('go').addEventListener('click', () => {
+  introDismissed = true;
+  el('overlay').classList.add('hidden');
+  if (latest && latest.m.st === 'over' && ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ t: 'restart' }));
+  }
+});
+
+/* ---------------- input ---------------- */
+
+let dragging = false;
+let dragStart = null;
+let dragNow = null;
+
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+canvas.addEventListener('mousedown', (e) => {
+  if (!myTeam) return;
+  const p = toWorld(e);
+
+  if (e.button === 0) {
+    dragging = true;
+    dragStart = p;
+    dragNow = p;
+  } else if (e.button === 2) {
+    issueOrder(p);
+  }
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (dragging) dragNow = toWorld(e);
+});
+
+window.addEventListener('mouseup', (e) => {
+  if (!dragging || e.button !== 0) return;
+  dragging = false;
+  const p = toWorld(e);
+  const additive = e.shiftKey;
+  if (!additive) selection.clear();
+
+  const dist = Math.hypot(p.x - dragStart.x, p.y - dragStart.y);
+  const view = renderState();
+  if (!view) return;
+
+  if (dist < 6) {
+    // Click: grab the single closest minion of yours under the cursor.
+    let best = null;
+    let bestD = 16 * 16;
+    for (const u of view.units.values()) {
+      if (u.team !== myTeam) continue;
+      const d = (u.x - p.x) ** 2 + (u.y - p.y) ** 2;
+      if (d < bestD) { bestD = d; best = u; }
+    }
+    if (best) selection.add(best.id);
+  } else {
+    const x0 = Math.min(dragStart.x, p.x), x1 = Math.max(dragStart.x, p.x);
+    const y0 = Math.min(dragStart.y, p.y), y1 = Math.max(dragStart.y, p.y);
+    for (const u of view.units.values()) {
+      if (u.team === myTeam && u.x >= x0 && u.x <= x1 && u.y >= y0 && u.y <= y1) {
+        selection.add(u.id);
+      }
+    }
+  }
+  if (selection.size) SFX.select();
+});
+
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'm') {           // spectators get the mute key too
+    SFX.toggle();
+    paintMute();
+    return;
+  }
+  if (!myTeam) return;
+  if (k === 'a') {
+    const view = renderState();
+    if (!view) return;
+    e.preventDefault();
+    selection.clear();
+    for (const u of view.units.values()) if (u.team === myTeam) selection.add(u.id);
+    if (selection.size) SFX.select();
+  } else if (k === 'escape') {
+    selection.clear();
+  }
+});
+
+function issueOrder(p) {
+  if (!ws || ws.readyState !== 1) return;
+  if (selection.size === 0) {
+    ws.send(JSON.stringify({ t: 'rally', x: p.x, y: p.y }));
+    flashes.push({ x: p.x, y: p.y, t: performance.now(), rally: true });
+    SFX.rally();
+  } else {
+    ws.send(JSON.stringify({ t: 'cmd', ids: Array.from(selection), x: p.x, y: p.y }));
+    flashes.push({ x: p.x, y: p.y, t: performance.now(), rally: false });
+    SFX.order();
+  }
+}
+
+const flashes = [];
+
+/* ---------------- interpolation ---------------- */
+
+function renderState() {
+  if (buffer.length === 0) return null;
+  if (buffer.length === 1) return { units: buffer[0].units, towers: buffer[0].towers, m: buffer[0].m };
+
+  const target = performance.now() - INTERP_MS;
+  let a = buffer[0];
+  let b = buffer[buffer.length - 1];
+  for (let i = 0; i < buffer.length - 1; i++) {
+    if (buffer[i].time <= target && buffer[i + 1].time >= target) {
+      a = buffer[i];
+      b = buffer[i + 1];
+      break;
+    }
+  }
+  if (target >= b.time) return { units: b.units, towers: b.towers, m: b.m };
+
+  const span = b.time - a.time || 1;
+  const alpha = Math.max(0, Math.min(1, (target - a.time) / span));
+
+  const units = new Map();
+  for (const [id, nu] of b.units) {
+    const ou = a.units.get(id);
+    units.set(id, ou
+      ? { id, team: nu.team, x: ou.x + (nu.x - ou.x) * alpha, y: ou.y + (nu.y - ou.y) * alpha, hp: nu.hp, atk: nu.atk }
+      : nu);
+  }
+  return { units, towers: b.towers, m: b.m };
+}
+
+/* ---------------- drawing ---------------- */
+
+function drawGrid() {
+  ctx.fillStyle = '#0a0e14';
+  ctx.fillRect(0, 0, WORLD.w, WORLD.h);
+  ctx.strokeStyle = 'rgba(255,255,255,.028)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x <= WORLD.w; x += 80) { ctx.moveTo(x, 0); ctx.lineTo(x, WORLD.h); }
+  for (let y = 0; y <= WORLD.h; y += 80) { ctx.moveTo(0, y); ctx.lineTo(WORLD.w, y); }
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(255,255,255,.05)';
+  ctx.setLineDash([6, 10]);
+  ctx.beginPath();
+  ctx.moveTo(WORLD.w / 2, 0);
+  ctx.lineTo(WORLD.w / 2, WORLD.h);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawTower(def, st, now) {
+  const { x, y } = def;
+  const col = COL[st.owner] || COL[0];
+  const size = def.base ? 26 : 19;
+
+  // capture-zone footprint
+  ctx.beginPath();
+  ctx.arc(x, y, CAP_RADIUS, 0, Math.PI * 2);
+  ctx.fillStyle = st.owner ? (st.owner === 1 ? 'rgba(69,167,245,.055)' : 'rgba(242,121,75,.055)') : 'rgba(255,255,255,.02)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.07)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // spawn pulse
+  if (st.pulse) {
+    ctx.beginPath();
+    ctx.arc(x, y, size + 12 + Math.sin(now / 90) * 2, 0, Math.PI * 2);
+    ctx.strokeStyle = col + '66';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // capture progress ring
+  const frac = Math.abs(st.cap) / 100;
+  if (frac > 0.01) {
+    ctx.beginPath();
+    ctx.arc(x, y, size + 7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
+    ctx.strokeStyle = st.cap > 0 ? COL[1] : COL[2];
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+  }
+
+  // body
+  ctx.beginPath();
+  const r = 5;
+  ctx.moveTo(x - size + r, y - size);
+  ctx.arcTo(x + size, y - size, x + size, y + size, r);
+  ctx.arcTo(x + size, y + size, x - size, y + size, r);
+  ctx.arcTo(x - size, y + size, x - size, y - size, r);
+  ctx.arcTo(x - size, y - size, x + size, y - size, r);
+  ctx.closePath();
+  ctx.fillStyle = COL_DARK[st.owner] || COL_DARK[0];
+  ctx.fill();
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = col;
+  ctx.font = '600 ' + (def.base ? 13 : 11) + 'px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(def.base ? 'BASE' : 'TOWER', x, y);
+}
+
+function drawUnit(u, selected, now) {
+  const col = COL[u.team];
+
+  if (selected) {
+    ctx.beginPath();
+    ctx.arc(u.x, u.y, UNIT_R + 4, 0, Math.PI * 2);
+    ctx.strokeStyle = '#ffffff88';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  ctx.arc(u.x, u.y, UNIT_R, 0, Math.PI * 2);
+  ctx.fillStyle = col;
+  ctx.fill();
+  ctx.strokeStyle = COL_DARK[u.team];
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  if (u.atk) {
+    ctx.beginPath();
+    ctx.arc(u.x, u.y, UNIT_R + 3 + Math.sin(now / 60) * 1.2, 0, Math.PI * 2);
+    ctx.strokeStyle = '#fff3c4aa';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+  }
+
+  if (u.hp < 100) {
+    const w = 14;
+    ctx.fillStyle = '#00000099';
+    ctx.fillRect(u.x - w / 2, u.y - UNIT_R - 6, w, 3);
+    ctx.fillStyle = u.hp > 50 ? '#6ee787' : u.hp > 25 ? '#e3b341' : '#f85149';
+    ctx.fillRect(u.x - w / 2, u.y - UNIT_R - 6, (w * u.hp) / 100, 3);
+  }
+}
+
+function drawRally(x, y) {
+  if (x < 0) return;
+  ctx.strokeStyle = COL[myTeam] + 'cc';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x, y - 20);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x, y - 20);
+  ctx.lineTo(x + 13, y - 15);
+  ctx.lineTo(x, y - 10);
+  ctx.closePath();
+  ctx.fillStyle = COL[myTeam] + 'cc';
+  ctx.fill();
+}
+
+function drawFlashes(now) {
+  for (let i = flashes.length - 1; i >= 0; i--) {
+    const f = flashes[i];
+    const age = (now - f.t) / 450;
+    if (age >= 1) { flashes.splice(i, 1); continue; }
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, 6 + age * 18, 0, Math.PI * 2);
+    ctx.strokeStyle = (f.rally ? '#ffffff' : COL[myTeam] || '#ffffff') +
+      Math.round((1 - age) * 200).toString(16).padStart(2, '0');
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+function frame() {
+  requestAnimationFrame(frame);
+  const now = performance.now();
+  drawGrid();
+
+  const view = renderState();
+  if (!view) return;
+
+  for (let i = 0; i < TOWERS.length; i++) {
+    if (view.towers[i]) drawTower(TOWERS[i], view.towers[i], now);
+  }
+
+  drawFlashes(now);
+
+  if (myTeam === 1) drawRally(view.m.r[0], view.m.r[1]);
+  if (myTeam === 2) drawRally(view.m.r[2], view.m.r[3]);
+
+  for (const u of view.units.values()) drawUnit(u, selection.has(u.id), now);
+
+  if (dragging && dragStart && dragNow) {
+    const x = Math.min(dragStart.x, dragNow.x);
+    const y = Math.min(dragStart.y, dragNow.y);
+    const w = Math.abs(dragNow.x - dragStart.x);
+    const h = Math.abs(dragNow.y - dragStart.y);
+    ctx.fillStyle = '#ffffff12';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = '#ffffff88';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + .5, y + .5, w, h);
+  }
+
+  if (selection.size) {
+    ctx.fillStyle = '#ffffffcc';
+    ctx.font = '600 13px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(selection.size + ' selected', 12, 12);
+  }
+}
+
+resize();
+connect();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

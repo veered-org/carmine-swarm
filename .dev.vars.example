@@ -1,0 +1,3 @@
+# Copy to .dev.vars for `wrangler dev`; set the same name with `wrangler secret put` for production.
+# Optional - without it the game runs, and /api/stats simply answers 403.
+STATS_KEY=choose-a-long-random-string   # guards GET /api/stats?key=...&days=N
