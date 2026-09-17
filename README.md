@@ -1,4 +1,6 @@
-# Swarm
+# Carmine: Swarm Command, a two-player real-time strategy game
+
+*Why Carmine? Carmine dye is made from swarms of cochineal insects.*
 
 **Play it now: [swarm.veered.org](https://swarm.veered.org)** · more games at [veered.org](https://veered.org)
 
