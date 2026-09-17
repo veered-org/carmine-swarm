@@ -13,6 +13,14 @@ side starts with a base and a stream of minions. Drag-select your minions, send 
 at the towers, and capture your opponent's base. Nothing to install, no account needed:
 share the link and play.
 
+## Please test before relying on it
+
+This is shared as-is, with no warranty. It works on my own computers, but your system,
+settings and software versions may differ, so please try it in a safe setting first.
+If something doesn't work, you can ask Claude (or another AI coding assistant) to look
+into it, and I'd appreciate hearing what you found and how you fixed it. You are also
+welcome to just let me know at support@veered.org, and I'll look into it.
+
 ## How it works
 
 - **Server:** a Cloudflare Worker with Durable Objects (`src/`). One `Room` Durable
